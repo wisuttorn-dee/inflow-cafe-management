@@ -7,7 +7,7 @@ Phase 1 foundation for INFLOW Riverside Café. GPOS remains the sales source of 
 - React 19 + TypeScript + Vite
 - Supabase PostgreSQL + Auth + Row Level Security
 - Tailwind CSS
-- SheetJS for GPOS `.xlsx` parsing
+- `read-excel-file` for browser-side GPOS `.xlsx` parsing
 - Cloudflare Pages compatible SPA build
 
 ## Local setup
@@ -54,7 +54,7 @@ npm run typecheck
 npm run build
 ```
 
-GitHub Actions runs the same checks. The first CI run also creates and commits `package-lock.json` if it is missing so dependencies become reproducible.
+GitHub Actions runs the same checks and keeps `package-lock.json` committed so dependencies are reproducible.
 
 ## Deployment preparation
 
