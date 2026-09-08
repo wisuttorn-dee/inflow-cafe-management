@@ -32,6 +32,14 @@ Generate database types with:
 supabase gen types typescript --project-id zqcaparsxipudifybpho --schema public > src/types/database.ts
 ```
 
+## Security architecture
+
+Operational RPCs exposed through the public Data API are `SECURITY INVOKER`. Where a workflow genuinely needs privileged atomic database access, the implementation is kept in the non-exposed `private` schema, checks `auth.uid()` and the active application role, and is invoked by a thin public wrapper.
+
+Current production database check: no `SECURITY DEFINER` functions remain in the exposed `public` schema and the latest Supabase Security Advisor scan reports zero security lints.
+
+`anon` has no execute permission on the protected operational RPCs.
+
 ## First OWNER bootstrap
 
 The database is designed so that the **first Supabase Auth user created becomes OWNER automatically**. Every later Auth user starts as STAFF until an OWNER changes the role.
@@ -94,4 +102,11 @@ GitHub Actions runs the same checks and keeps `package-lock.json` committed.
 
 ## Deployment
 
-The Vite `dist/` output is compatible with Cloudflare Pages. Deployment should happen only after the first OWNER is created, end-to-end workflow testing is complete, current Supabase security warnings are reviewed, and the repository visibility/secrets configuration are appropriate for production use.
+The Vite `dist/` output is compatible with Cloudflare Pages. Before production deployment:
+
+1. Create the first real OWNER account.
+2. Run the authenticated end-to-end workflow using controlled café test data.
+3. Confirm GPOS import totals, recipe usage, inventory movement, COGS, expenses and monthly profit.
+4. Confirm Supabase Security Advisor remains clean.
+5. Review repository visibility and hosting environment variables.
+6. Configure the Supabase Auth site URL / redirect URLs for the production domain.
