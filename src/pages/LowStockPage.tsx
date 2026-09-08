@@ -1,0 +1,14 @@
+import {useCallback,useEffect,useMemo,useState} from 'react';
+import {supabase} from '../lib/supabase';
+
+type Row={ingredient_id:string;ingredient_code:string|null;name_th:string|null;name_en:string|null;current_quantity:number|null;minimum_stock_level:number|null;weighted_avg_cost:number|null;current_value:number|null;base_unit_id:string|null};
+type Unit={id:string;code:string};
+
+export function LowStockPage(){
+ const[rows,setRows]=useState<Row[]>([]);const[units,setUnits]=useState<Unit[]>([]);const[msg,setMsg]=useState('');const[query,setQuery]=useState('');
+ const load=useCallback(async()=>{setMsg('');const[a,b]=await Promise.all([supabase.from('inventory_summary').select('ingredient_id,ingredient_code,name_th,name_en,current_quantity,minimum_stock_level,weighted_avg_cost,current_value,base_unit_id').eq('is_low_stock',true).order('name_th'),supabase.from('units').select('id,code')]);if(a.error||b.error){setMsg(a.error?.message||b.error?.message||'โหลดข้อมูลสต็อกต่ำไม่สำเร็จ');return}setRows((a.data??[]) as Row[]);setUnits((b.data??[]) as Unit[])},[]);
+ useEffect(()=>{void load()},[load]);
+ const unitMap=useMemo(()=>Object.fromEntries(units.map(u=>[u.id,u.code])),[units]);
+ const filtered=rows.filter(r=>`${r.ingredient_code??''} ${r.name_th??''} ${r.name_en??''}`.toLowerCase().includes(query.toLowerCase()));
+ return <><div className="pagehead"><div><h1>วัตถุดิบใกล้หมด</h1><p className="lead">แสดงเฉพาะรายการที่คงเหลือต่ำกว่าหรือเท่ากับ Minimum Stock Level เพื่อช่วยวางแผนสั่งซื้อก่อนของหมด</p></div><button className="secondary" onClick={()=>void load()}>รีเฟรช</button></div><div className="cards compact"><div className="card"><small>รายการที่ต้องติดตาม</small><strong>{rows.length}</strong></div><div className="card"><small>มูลค่าสต็อกคงเหลือ</small><strong>฿{rows.reduce((s,r)=>s+Number(r.current_value??0),0).toFixed(2)}</strong></div></div><div className="panel"><div className="toolbar"><input placeholder="ค้นหาวัตถุดิบ..." value={query} onChange={e=>setQuery(e.target.value)}/></div>{msg&&<div className="warn">{msg}</div>}<div className="tablewrap"><table><thead><tr><th>รหัส</th><th>วัตถุดิบ</th><th>คงเหลือ</th><th>ขั้นต่ำ</th><th>ขาดจากขั้นต่ำ</th><th>ต้นทุนเฉลี่ย</th><th>มูลค่าคงเหลือ</th></tr></thead><tbody>{filtered.map(r=>{const current=Number(r.current_quantity??0);const min=Number(r.minimum_stock_level??0);return <tr key={r.ingredient_id} className="bad"><td>{r.ingredient_code??''}</td><td><strong>{r.name_th??r.name_en??'-'}</strong>{r.name_en&&<small className="muted block">{r.name_en}</small>}</td><td>{current.toFixed(2)} {r.base_unit_id?unitMap[r.base_unit_id]??'':''}</td><td>{min.toFixed(2)}</td><td>{Math.max(0,min-current).toFixed(2)}</td><td>฿{Number(r.weighted_avg_cost??0).toFixed(4)}</td><td>฿{Number(r.current_value??0).toFixed(2)}</td></tr>})}{filtered.length===0&&<tr><td colSpan={7} className="empty">ไม่มีวัตถุดิบที่เข้าเงื่อนไข</td></tr>}</tbody></table></div></div></>;
+}
