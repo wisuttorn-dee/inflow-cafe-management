@@ -56,9 +56,40 @@ jobs:
         run: npx --yes wrangler@4.129.1 pages project create inflow-cafe-management --production-branch=main || true
 
       - name: Deploy production
-        run: >-
-          npx --yes wrangler@4.129.1 pages deploy dist
-          --project-name=inflow-cafe-management
-          --branch=main
-          --commit-hash=${{ github.sha }}
-          --commit-message="${{ github.event.head_commit.message || 'Manual production deployment' }}"
+        id: deploy
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx --yes wrangler@4.129.1 pages deploy dist \
+            --project-name=inflow-cafe-management \
+            --branch=main \
+            --commit-hash="${{ github.sha }}" \
+            --commit-message="Manual production deployment" | tee /tmp/cloudflare-deploy.log
+          DEPLOYMENT_URL=$(grep -Eo 'https://[A-Za-z0-9._-]+\.pages\.dev' /tmp/cloudflare-deploy.log | tail -n 1 || true)
+          if [ -z "$DEPLOYMENT_URL" ]; then
+            echo "Could not detect the Cloudflare Pages deployment URL." >&2
+            exit 1
+          fi
+          echo "url=$DEPLOYMENT_URL" >> "$GITHUB_OUTPUT"
+          echo "Deployment URL: $DEPLOYMENT_URL"
+
+      - name: Smoke test deployed SPA
+        shell: bash
+        env:
+          DEPLOYMENT_URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 2 "$DEPLOYMENT_URL/" > /tmp/index.html
+          grep -qi '<div id="root"' /tmp/index.html
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 2 "$DEPLOYMENT_URL/dashboard" > /tmp/dashboard.html
+          grep -qi '<div id="root"' /tmp/dashboard.html
+          echo "Cloudflare Pages smoke test passed: $DEPLOYMENT_URL"
+
+      - name: Deployment summary
+        if: success()
+        run: |
+          echo "## INFLOW Cloudflare Pages deployment" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Production deployment: ${{ steps.deploy.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "SPA root and nested-route smoke tests passed." >> "$GITHUB_STEP_SUMMARY"
