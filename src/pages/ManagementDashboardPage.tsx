@@ -1,0 +1,12 @@
+import {useCallback,useEffect,useState} from 'react';
+import {supabase} from '../lib/supabase';
+
+type Summary={period_start:string;period_end_exclusive:string;net_sales:number;cogs:number;gross_profit:number;gross_margin_pct:number;operating_expenses:number;operating_profit:number;incomplete_cogs_rows:number};
+function Card({t,v}:{t:string;v:string}){return <div className="card"><small>{t}</small><strong>{v}</strong></div>}
+
+export function ManagementDashboardPage(){
+ const now=new Date();const[month,setMonth]=useState(`${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`);const[data,setData]=useState<Summary|null>(null);const[msg,setMsg]=useState('');
+ const load=useCallback(async()=>{setMsg('');const{data:result,error}=await supabase.rpc('get_management_summary',{p_month:`${month}-01`});if(error){setData(null);setMsg(error.message);return}setData(result as unknown as Summary)},[month]);
+ useEffect(()=>{void load()},[load]);
+ return <><h1>Management Dashboard</h1><p className="lead">Monthly management view combining GPOS sales, historical COGS and operating expenses. Purchasing is reflected in inventory cost, not counted again as an operating expense.</p><div className="panel"><label>Month <input type="month" value={month} onChange={e=>setMonth(e.target.value)}/></label> <button onClick={()=>void load()}>Refresh</button>{msg&&<div className="warn">{msg}</div>}</div>{data&&<><div className="cards"><Card t="Net Sales" v={`฿${Number(data.net_sales).toFixed(2)}`}/><Card t="COGS" v={`฿${Number(data.cogs).toFixed(2)}`}/><Card t="Gross Profit" v={`฿${Number(data.gross_profit).toFixed(2)}`}/><Card t="Gross Margin" v={`${Number(data.gross_margin_pct).toFixed(1)}%`}/><Card t="Operating Expenses" v={`฿${Number(data.operating_expenses).toFixed(2)}`}/><Card t="Operating Profit" v={`฿${Number(data.operating_profit).toFixed(2)}`}/></div>{Number(data.incomplete_cogs_rows)>0&&<div className="warn">COGS is incomplete for {data.incomplete_cogs_rows} sales row(s). Operating profit should not be treated as final until those rows are costed.</div>}<div className="panel"><h2>Management interpretation</h2><p><strong>Gross Profit</strong> = Net Sales − Historical COGS. <strong>Operating Profit</strong> = Gross Profit − recorded operating expenses. This is an internal management measure, not statutory accounting profit or a tax return figure.</p><p>Period: {data.period_start} to before {data.period_end_exclusive}</p></div></>}</>;
+}
