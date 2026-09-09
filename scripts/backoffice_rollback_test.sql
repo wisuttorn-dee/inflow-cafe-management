@@ -34,6 +34,8 @@ SELECT
   gen_random_uuid()::text AS expense_category_id
 \gset
 
+SELECT set_config('inflow.e2e_ingredient_id', :'ingredient_id', true);
+
 INSERT INTO public.units(id, code, name_th, name_en, unit_type, decimal_places)
 VALUES (:'unit_id'::uuid, 'E2E_G', 'กรัมทดสอบ', 'E2E gram', 'MASS', 2);
 
@@ -92,10 +94,11 @@ DO $$
 DECLARE
   v_qty numeric;
   v_cost numeric;
+  v_ingredient uuid := current_setting('inflow.e2e_ingredient_id')::uuid;
 BEGIN
   SELECT current_quantity, current_value INTO v_qty, v_cost
   FROM public.inventory_summary
-  WHERE ingredient_id = :'ingredient_id'::uuid;
+  WHERE ingredient_id = v_ingredient;
   IF abs(v_qty - 800) > 0.001 THEN
     RAISE EXCEPTION 'Expected stock 800 after sales usage, got %', v_qty;
   END IF;
@@ -116,10 +119,11 @@ DO $$
 DECLARE
   v_qty numeric;
   v_avg numeric;
+  v_ingredient uuid := current_setting('inflow.e2e_ingredient_id')::uuid;
 BEGIN
-  SELECT current_quantity, weighted_average_cost INTO v_qty, v_avg
+  SELECT current_quantity, weighted_avg_cost INTO v_qty, v_avg
   FROM public.inventory_summary
-  WHERE ingredient_id = :'ingredient_id'::uuid;
+  WHERE ingredient_id = v_ingredient;
   IF abs(v_qty - 1000) > 0.001 THEN
     RAISE EXCEPTION 'Expected stock 1000 after purchase, got %', v_qty;
   END IF;
@@ -158,10 +162,11 @@ DO $$
 DECLARE
   v_qty numeric;
   v_summary jsonb;
+  v_ingredient uuid := current_setting('inflow.e2e_ingredient_id')::uuid;
 BEGIN
   SELECT current_quantity INTO v_qty
   FROM public.inventory_summary
-  WHERE ingredient_id = :'ingredient_id'::uuid;
+  WHERE ingredient_id = v_ingredient;
   IF abs(v_qty - 980) > 0.001 THEN
     RAISE EXCEPTION 'Expected final stock 980, got %', v_qty;
   END IF;
