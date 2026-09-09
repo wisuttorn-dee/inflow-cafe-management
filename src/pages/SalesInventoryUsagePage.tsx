@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { thaiError, unitDisplayName } from '../lib/ui';
+import { formatUnit, uiError } from '../lib/ui';
 
 type CostingStatus = 'PENDING' | 'PROCESSED' | 'MISSING_COST' | 'ERROR';
 type Role = 'OWNER' | 'MANAGER' | 'STAFF';
@@ -30,7 +30,6 @@ type Movement = {
 };
 type Ingredient = { id: string; name_th: string; name_en: string | null; base_unit_id: string };
 type Unit = { id: string; code: string; name_th: string | null; name_en: string | null };
-
 type DetailRow = Movement & { ingredientName: string; unitName: string };
 
 const statusLabel: Record<string, string> = {
@@ -72,7 +71,7 @@ export function SalesInventoryUsagePage() {
       supabase.from('units').select('id,code,name_th,name_en'),
     ]);
     if (a.error || b.error || c.error || d.error || e.error || f.error) {
-      setMsg(thaiError('โหลดข้อมูลการตัดสต็อกจากยอดขาย'));
+      setMsg(uiError('โหลดข้อมูลการตัดสต็อกจากยอดขาย'));
       return;
     }
     setItems((a.data ?? []) as SaleItem[]);
@@ -108,7 +107,7 @@ export function SalesInventoryUsagePage() {
     return {
       ...m,
       ingredientName: ing?.name_th || ing?.name_en || m.ingredient_id,
-      unitName: unitDisplayName(u),
+      unitName: formatUnit(u),
     };
   }), [movements, selected, ingredientMap, unitMap]);
 
@@ -132,7 +131,7 @@ export function SalesInventoryUsagePage() {
     const { data, error } = await supabase.rpc('process_pending_sales_inventory', { p_sales_item_ids: ids });
     setBusy(false);
     if (error) {
-      setMsg(thaiError('ประมวลผลการตัดสต็อก'));
+      setMsg(uiError('ประมวลผลการตัดสต็อก'));
       return;
     }
     const result = data as { processed?: number; missing_cost?: number; errors?: number } | null;
