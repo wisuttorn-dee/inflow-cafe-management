@@ -58,21 +58,41 @@ jobs:
         run: |
           set -euo pipefail
           TS=$(date -u '+%Y%m%dT%H%M%SZ')
-          tar -C backup -czf "/tmp/inflow-receipts-${TS}.tar.gz" receipts
+          RAW="/tmp/inflow-receipts-${TS}.tar.gz"
+          ENC="backup/inflow-receipts-${TS}.tar.gz.enc"
+          SHA="${ENC}.sha256"
+          tar -C backup -czf "$RAW" receipts
           openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
-            -in "/tmp/inflow-receipts-${TS}.tar.gz" \
-            -out "backup/inflow-receipts-${TS}.tar.gz.enc" \
+            -in "$RAW" \
+            -out "$ENC" \
             -pass env:BACKUP_PASSPHRASE
-          sha256sum "backup/inflow-receipts-${TS}.tar.gz.enc" > "backup/inflow-receipts-${TS}.tar.gz.enc.sha256"
-          rm -rf backup/receipts "/tmp/inflow-receipts-${TS}.tar.gz"
+          sha256sum "$ENC" > "$SHA"
+          rm -rf backup/receipts "$RAW"
+          echo "RECEIPT_BACKUP_FILE=$ENC" >> "$GITHUB_ENV"
+          echo "RECEIPT_BACKUP_SHA=$SHA" >> "$GITHUB_ENV"
+
+      - name: Offline archive validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c "$RECEIPT_BACKUP_SHA"
+          VERIFY_ARCHIVE="/tmp/inflow-receipts-validation.tar.gz"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+            -in "$RECEIPT_BACKUP_FILE" \
+            -out "$VERIFY_ARCHIVE" \
+            -pass env:BACKUP_PASSPHRASE
+          tar -tzf "$VERIFY_ARCHIVE" > /tmp/inflow-receipts-list.txt
+          test -s /tmp/inflow-receipts-list.txt
+          grep -Eq '^receipts/?$|^receipts/' /tmp/inflow-receipts-list.txt
+          rm -f "$VERIFY_ARCHIVE" /tmp/inflow-receipts-list.txt
 
       - name: Upload encrypted receipt artifact
         uses: actions/upload-artifact@v4
         with:
           name: inflow-receipts-backup-${{ github.run_id }}
           path: |
-            backup/*.enc
-            backup/*.sha256
+            ${{ env.RECEIPT_BACKUP_FILE }}
+            ${{ env.RECEIPT_BACKUP_SHA }}
           if-no-files-found: error
           retention-days: 14
           compression-level: 0
@@ -114,6 +134,8 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Private Storage receipt export: completed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Encryption: AES-256-CBC + PBKDF2" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA-256 integrity check: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Offline decrypt + tar archive validation: passed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Artifact retention: 14 days" >> "$GITHUB_STEP_SUMMARY"
           echo "- Unencrypted receipt files removed before artifact upload" >> "$GITHUB_STEP_SUMMARY"
           echo "- Failure alert: GitHub Issue assigned to repository owner" >> "$GITHUB_STEP_SUMMARY"
