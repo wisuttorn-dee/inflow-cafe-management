@@ -39,13 +39,12 @@ jobs:
             exit 1
           fi
 
-      - name: Install PostgreSQL 17 client
+      - name: Verify PostgreSQL 17 client image
         shell: bash
         run: |
           set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
-          /usr/lib/postgresql/17/bin/pg_dump --version
+          docker pull postgres:17
+          docker run --rm postgres:17 pg_dump --version
 
       - name: Create database dump
         shell: bash
@@ -55,12 +54,18 @@ jobs:
           TS=$(date -u '+%Y%m%dT%H%M%SZ')
           RAW="backup/inflow-${TS}.dump"
           ENC="${RAW}.enc"
-          /usr/lib/postgresql/17/bin/pg_dump "$SUPABASE_DB_URL" \
-            --format=custom \
-            --compress=9 \
-            --no-owner \
-            --no-acl \
-            --file="$RAW"
+          RAW_NAME=$(basename "$RAW")
+
+          docker run --rm \
+            -v "$PWD/backup:/backup" \
+            postgres:17 \
+            pg_dump "$SUPABASE_DB_URL" \
+              --format=custom \
+              --compress=9 \
+              --no-owner \
+              --no-acl \
+              --file="/backup/${RAW_NAME}"
+
           openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
             -in "$RAW" -out "$ENC" \
             -pass env:BACKUP_PASSPHRASE
@@ -86,7 +91,7 @@ jobs:
           echo "## INFLOW Encrypted Database Backup" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "- Database dump: completed" >> "$GITHUB_STEP_SUMMARY"
-          echo "- PostgreSQL client: 17" >> "$GITHUB_STEP_SUMMARY"
+          echo "- PostgreSQL client: 17 (Docker)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Encryption: AES-256-CBC + PBKDF2" >> "$GITHUB_STEP_SUMMARY"
           echo "- Artifact retention: 7 days" >> "$GITHUB_STEP_SUMMARY"
           echo "- Raw unencrypted dump removed before upload" >> "$GITHUB_STEP_SUMMARY"
