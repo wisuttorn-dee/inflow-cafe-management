@@ -155,7 +155,8 @@ SELECT public.record_expense(
   'CASH'::text,
   NULL::uuid,
   'AUTO-E2E'::text,
-  'Rollback test only'::text
+  'Rollback test only'::text,
+  NULL::text
 );
 
 DO $$
