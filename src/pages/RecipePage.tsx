@@ -1,11 +1,11 @@
 import {useCallback,useEffect,useMemo,useState} from 'react';
 import {supabase} from '../lib/supabase';
+import {formatUnit} from '../lib/ui';
 
 type R={id:string;menu_item_id:string;recipe_name:string;version_no:number;yield_quantity:number;yield_unit_id:string|null;effective_from:string;effective_to:string|null;status:string};
 type Item={id:string;recipe_id:string;ingredient_id:string;quantity:number;unit_id:string;wastage_percentage:number};
 type Opt={id:string;name_th?:string;name_en?:string;code?:string};
 const statusLabel:Record<string,string>={DRAFT:'ร่าง',ACTIVE:'ใช้งาน',INACTIVE:'ปิดใช้งาน'};
-const unitCodeLabel:Record<string,string>={G:'กรัม',KG:'กิโลกรัม',ML:'มิลลิลิตร',L:'ลิตร',PCS:'ชิ้น',PC:'ชิ้น',PACK:'แพ็ก',BAG:'ถุง',BOTTLE:'ขวด',CAN:'กระป๋อง',BOX:'กล่อง',CUP:'ถ้วย',TBSP:'ช้อนโต๊ะ',TSP:'ช้อนชา'};
 
 export function RecipePage(){
  const[recipes,setRecipes]=useState<R[]>([]),[items,setItems]=useState<Item[]>([]),[menus,setMenus]=useState<Opt[]>([]),[ingredients,setIngredients]=useState<Opt[]>([]),[units,setUnits]=useState<Opt[]>([]);const[selected,setSelected]=useState('');const[msg,setMsg]=useState('');
@@ -14,7 +14,7 @@ export function RecipePage(){
  const loadItems=useCallback(async(id:string)=>{if(!id){setItems([]);return}const{data,error}=await supabase.from('recipe_items').select('*').eq('recipe_id',id).order('display_order');if(error){setMsg('โหลดวัตถุดิบในสูตรไม่สำเร็จ กรุณาลองใหม่');return}setItems((data??[]) as Item[])},[]);
  useEffect(()=>{void load()},[load]);useEffect(()=>{void loadItems(selected)},[selected,loadItems]);
  const name=(opts:Opt[],id:string)=>{const x=opts.find(v=>v.id===id);return x?.name_th||x?.name_en||x?.code||id};
- const unitName=(id:string)=>{const x=units.find(v=>v.id===id);if(!x)return id;return x.name_th||unitCodeLabel[x.code?.toUpperCase()||'']||x.code||x.name_en||id};
+ const unitName=(id:string)=>formatUnit(units.find(v=>v.id===id),id);
  async function createRecipe(e:React.FormEvent){e.preventDefault();setMsg('');const{error}=await supabase.from('recipes').insert({menu_item_id:form.menu_item_id,recipe_name:form.recipe_name,version_no:Number(form.version_no),yield_quantity:Number(form.yield_quantity),yield_unit_id:form.yield_unit_id||null,effective_from:form.effective_from,status:'DRAFT'});if(error){setMsg('สร้างสูตรไม่สำเร็จ กรุณาตรวจข้อมูลและลองใหม่');return}setMsg('สร้างสูตรเป็นสถานะร่างแล้ว');await load()}
  async function addLine(e:React.FormEvent){e.preventDefault();if(!selected)return;const{error}=await supabase.from('recipe_items').insert({recipe_id:selected,ingredient_id:line.ingredient_id,quantity:Number(line.quantity),unit_id:line.unit_id,wastage_percentage:Number(line.wastage_percentage||0),display_order:items.length+1});if(error){setMsg('เพิ่มวัตถุดิบในสูตรไม่สำเร็จ กรุณาตรวจข้อมูลและลองใหม่');return}setLine({ingredient_id:'',quantity:'',unit_id:'',wastage_percentage:'0'});await loadItems(selected)}
  async function activate(id:string){const recipe=recipes.find(r=>r.id===id);if(!recipe)return;const{error}=await supabase.from('recipes').update({status:'ACTIVE'}).eq('id',id);if(error)setMsg('เปิดใช้งานสูตรไม่สำเร็จ กรุณาลองใหม่');else{setMsg('เปิดใช้งานสูตรแล้ว');await load()}}
