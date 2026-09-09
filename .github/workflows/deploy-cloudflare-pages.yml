@@ -2,13 +2,28 @@ name: Deploy Cloudflare Pages
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'index.html'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'vite.config.*'
+      - 'tsconfig*.json'
+      - 'tailwind.config.*'
+      - 'postcss.config.*'
+      - '.github/workflows/deploy-cloudflare-pages.yml'
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: cloudflare-pages-production
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -65,7 +80,7 @@ jobs:
             --project-name=inflow-cafe-management \
             --branch=main \
             --commit-hash="${{ github.sha }}" \
-            --commit-message="Manual production deployment" | tee /tmp/cloudflare-deploy.log
+            --commit-message="INFLOW production deployment" | tee /tmp/cloudflare-deploy.log
           DEPLOYMENT_URL=$(grep -Eo 'https://[A-Za-z0-9._-]+\.pages\.dev' /tmp/cloudflare-deploy.log | tail -n 1 || true)
           if [ -z "$DEPLOYMENT_URL" ]; then
             echo "Could not detect the Cloudflare Pages deployment URL." >&2
@@ -99,6 +114,36 @@ jobs:
           grep -qi '<div id="root"' /tmp/dashboard.html
           echo "Cloudflare Pages smoke test passed: $PRODUCTION_URL"
 
+      - name: Notify owner on deployment failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="🚨 INFLOW: Production Deployment ล้มเหลว"
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          BODY="การ deploy INFLOW ไป Cloudflare Pages ล้มเหลว กรุณาตรวจสอบ GitHub Actions\n\nRun: ${RUN_URL}\nCommit: ${GITHUB_SHA}\nเวลา (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --assignee "$GITHUB_REPOSITORY_OWNER"
+          fi
+
+      - name: Resolve previous deployment alert
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="🚨 INFLOW: Production Deployment ล้มเหลว"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue close "$EXISTING" --comment "✅ Production Deployment กลับมาทำงานปกติแล้วใน run ${GITHUB_RUN_ID}."
+          fi
+
       - name: Deployment summary
         if: success()
         run: |
@@ -108,3 +153,4 @@ jobs:
           echo "Version URL: ${{ steps.deploy.outputs.url }}" >> "$GITHUB_STEP_SUMMARY"
           echo "Commit: ${{ github.sha }}" >> "$GITHUB_STEP_SUMMARY"
           echo "SPA root and nested-route smoke tests passed." >> "$GITHUB_STEP_SUMMARY"
+          echo "Automatic deployment: enabled for frontend changes on main." >> "$GITHUB_STEP_SUMMARY"
