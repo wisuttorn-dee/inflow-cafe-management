@@ -25,6 +25,22 @@ const sections = [
   ['ค่าใช้จ่าย','/expenses'],['รายงานกำไร','/reports'],['หน่วยนับ','/settings/units'],['หมวดเมนู','/settings/categories'],['วัตถุดิบ','/ingredients'],['ผู้ใช้งาน','/settings/users'],['ตั้งค่า','/settings']
 ] as const;
 
+const fieldLabels: Record<string,string> = {
+  name_th: 'ชื่อภาษาไทย',
+  name_en: 'ชื่อภาษาอังกฤษ',
+  display_order: 'ลำดับการแสดงผล',
+  selling_price: 'ราคาขาย',
+  supplier_name: 'ชื่อซัพพลายเออร์',
+  phone: 'เบอร์โทรศัพท์',
+  email: 'อีเมล',
+  code: 'รหัสหน่วย',
+  unit_type: 'ประเภทหน่วย',
+  ingredient_code: 'รหัสวัตถุดิบ',
+  base_unit_id: 'หน่วยฐาน',
+};
+
+function fieldLabel(field:string){return fieldLabels[field] ?? field}
+
 function Shell(){
   const[navOpen,setNavOpen]=useState(false);
   return <div className="app">
@@ -47,4 +63,4 @@ function Card({t,v}:{t:string;v:string}){return <div className="card"><small>{t}
 function ComingSoon({title}:{title:string}){return <><h1>{title}</h1><div className="panel">ส่วนนี้อยู่ในแผนการพัฒนารอบถัดไป</div></>}
 function Settings(){return <><h1>ตั้งค่า</h1><div className="panel"><h2>สิทธิ์การใช้งาน</h2><p>OWNER และ MANAGER จัดการข้อมูลหลัก สูตร สต็อก การรับซื้อ การปิดรอบตรวจนับ การ Void ค่าใช้จ่าย และรายงานได้ ส่วน STAFF บันทึกงานประจำวันตามสิทธิ์ RLS ที่ฐานข้อมูลกำหนด</p></div></>}
 
-function MasterData({title,table,fields}:{title:string;table:string;fields:string[]}){const[rows,setRows]=useState<Record<string,unknown>[]>([]);const[form,setForm]=useState<Record<string,string>>({});const[msg,setMsg]=useState('');const load=useCallback(async()=>{const{data,error}=await supabase.from(table).select('*').limit(50);setRows((data??[]) as Record<string,unknown>[]);if(error)setMsg(error.message)},[table]);useEffect(()=>{void load()},[load]);async function create(e:React.FormEvent){e.preventDefault();setMsg('');const payload=Object.fromEntries(fields.map(f=>[f,(f.includes('price')||f.includes('order'))?Number(form[f]||0):(form[f]||null)]));const{error}=await supabase.from(table).insert(payload);if(error){setMsg(error.message);return}setForm({});setMsg('บันทึกแล้ว');await load()}async function edit(row:Record<string,unknown>){const payload:Record<string,unknown>={};for(const f of fields){const next=window.prompt(`แก้ไข ${f}`,String(row[f]??''));if(next===null)return;payload[f]=(f.includes('price')||f.includes('order'))?Number(next):next||null}const{error}=await supabase.from(table).update(payload).eq('id',String(row.id));if(error)setMsg(error.message);else{setMsg('แก้ไขแล้ว');await load()}}async function deactivate(id:string){const{error}=await supabase.from(table).update({is_active:false}).eq('id',id);if(error)setMsg(error.message);else await load()}return <><h1>{title}</h1><div className="panel"><form className="crudform" onSubmit={e=>void create(e)}>{fields.map(f=><input key={f} placeholder={f} value={form[f]??''} onChange={e=>setForm(x=>({...x,[f]:e.target.value}))} required={!['name_en','phone','email'].includes(f)}/>) }<button>เพิ่ม</button></form>{msg&&<p>{msg}</p>}<div className="tablewrap"><table><thead><tr>{fields.map(f=><th key={f}>{f}</th>)}<th>จัดการ</th></tr></thead><tbody>{rows.map((row,i)=><tr key={String(row.id??i)}>{fields.map(f=><td key={f}>{String(row[f]??'')}</td>)}<td><button className="smallbtn" onClick={()=>void edit(row)}>แก้ไข</button> {row.is_active!==undefined&&<button className="smallbtn danger" onClick={()=>void deactivate(String(row.id))}>ปิดใช้งาน</button>}</td></tr>)}</tbody></table></div></div></>}
+function MasterData({title,table,fields}:{title:string;table:string;fields:string[]}){const[rows,setRows]=useState<Record<string,unknown>[]>([]);const[form,setForm]=useState<Record<string,string>>({});const[msg,setMsg]=useState('');const load=useCallback(async()=>{const{data,error}=await supabase.from(table).select('*').limit(50);setRows((data??[]) as Record<string,unknown>[]);if(error)setMsg(error.message)},[table]);useEffect(()=>{void load()},[load]);async function create(e:React.FormEvent){e.preventDefault();setMsg('');const payload=Object.fromEntries(fields.map(f=>[f,(f.includes('price')||f.includes('order'))?Number(form[f]||0):(form[f]||null)]));const{error}=await supabase.from(table).insert(payload);if(error){setMsg(error.message);return}setForm({});setMsg('บันทึกแล้ว');await load()}async function edit(row:Record<string,unknown>){const payload:Record<string,unknown>={};for(const f of fields){const next=window.prompt(`แก้ไข ${fieldLabel(f)}`,String(row[f]??''));if(next===null)return;payload[f]=(f.includes('price')||f.includes('order'))?Number(next):next||null}const{error}=await supabase.from(table).update(payload).eq('id',String(row.id));if(error)setMsg(error.message);else{setMsg('แก้ไขแล้ว');await load()}}async function deactivate(id:string){const{error}=await supabase.from(table).update({is_active:false}).eq('id',id);if(error)setMsg(error.message);else await load()}return <><h1>{title}</h1><div className="panel"><form className="crudform" onSubmit={e=>void create(e)}>{fields.map(f=><input key={f} placeholder={fieldLabel(f)} aria-label={fieldLabel(f)} value={form[f]??''} onChange={e=>setForm(x=>({...x,[f]:e.target.value}))} required={!['name_en','phone','email'].includes(f)}/>) }<button>เพิ่ม</button></form>{msg&&<p>{msg}</p>}<div className="tablewrap"><table><thead><tr>{fields.map(f=><th key={f}>{fieldLabel(f)}</th>)}<th>จัดการ</th></tr></thead><tbody>{rows.map((row,i)=><tr key={String(row.id??i)}>{fields.map(f=><td key={f}>{String(row[f]??'')}</td>)}<td><button className="smallbtn" onClick={()=>void edit(row)}>แก้ไข</button> {row.is_active!==undefined&&<button className="smallbtn danger" onClick={()=>void deactivate(String(row.id))}>ปิดใช้งาน</button>}</td></tr>)}</tbody></table></div></div></>}
