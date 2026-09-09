@@ -45,7 +45,7 @@ export function GposImportPage() {
       await refreshMappings(prepared);
     } catch (err) {
       setRows([]);
-      setError(err instanceof Error ? err.message : 'Unable to prepare GPOS file');
+      setError(err instanceof Error ? err.message : 'เตรียมไฟล์ GPOS ไม่สำเร็จ');
     } finally { setBusy(false); }
   }
 
@@ -86,18 +86,18 @@ export function GposImportPage() {
       source_system: 'GPOS', external_item_name: itemName, normalised_item_name: normalised,
       menu_item_id: menuItemId, is_active: true,
     }, { onConflict: 'source_system,normalised_item_name' });
-    if (upsertError) { setError(`Unable to save product mapping: ${upsertError.message}`); return; }
+    if (upsertError) { setError(`บันทึกการจับคู่สินค้าไม่สำเร็จ: ${upsertError.message}`); return; }
     setRows(current => current.map(r => r.normalisedItemName === normalised ? { ...r, mappedMenuItemId: menuItemId } : r));
-    setMessage(`Mapped ${itemName}`);
+    setMessage(`จับคู่ ${itemName} แล้ว`);
   }
 
   async function savePaymentMapping(gposValue: string, salesChannel: string, paymentMethod: string) {
     const { error: upsertError } = await supabase.from('payment_channel_mapping').upsert({
       gpos_value: gposValue, sales_channel: salesChannel, payment_method: paymentMethod, is_active: true,
     }, { onConflict: 'gpos_value' });
-    if (upsertError) { setError(`Unable to save payment mapping: ${upsertError.message}`); return; }
+    if (upsertError) { setError(`บันทึกการจับคู่การชำระเงินไม่สำเร็จ: ${upsertError.message}`); return; }
     await refreshMappings(rows);
-    setMessage(`Mapped payment ${gposValue}`);
+    setMessage(`จับคู่การชำระเงิน ${gposValue} แล้ว`);
   }
 
   async function confirmImport() {
@@ -106,59 +106,59 @@ export function GposImportPage() {
     try {
       const result = await commitGposImport(filename, rows);
       setCommitResult(result);
-      setMessage(`Import completed: ${result.imported_rows} new rows, ${result.duplicate_rows} duplicates skipped.`);
+      setMessage(`นำเข้าสำเร็จ: ${result.imported_rows} รายการใหม่, ข้ามรายการซ้ำ ${result.duplicate_rows} รายการ`);
       const prepared = await prepareGposRows(rows, rows.map(r => r.sourceRowHash));
       setRows(prepared);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Import failed');
+      setError(err instanceof Error ? err.message : 'นำเข้าไม่สำเร็จ');
     } finally { setBusy(false); }
   }
 
   return <>
-    <h1>Import GPOS</h1>
-    <p className="lead">Upload, validate, map and confirm GPOS sales. Phase 2 writes sales only. Inventory deduction remains disabled.</p>
+    <h1>นำเข้าข้อมูล GPOS</h1>
+    <p className="lead">อัปโหลด ตรวจสอบ จับคู่ และยืนยันข้อมูลยอดขายจาก GPOS</p>
     <div className="panel">
       <input type="file" accept=".xlsx" onChange={e => void choose(e)} disabled={busy} />
-      {busy && <p>Processing…</p>}
+      {busy && <p>กำลังประมวลผล…</p>}
       {error && <div className="warn">{error}</div>}
       {message && <p>{message}</p>}
       {rows.length > 0 && <>
         <div className="cards compact">
-          <Metric title="Source rows" value={summary.source} />
-          <Metric title="Ready" value={summary.ready} />
-          <Metric title="Duplicates" value={summary.duplicate} />
-          <Metric title="Invalid" value={summary.invalid} />
-          <Metric title="Unmapped products" value={summary.unmapped} />
-          <Metric title="New net sales" value={`฿${summary.net.toFixed(2)}`} />
+          <Metric title="รายการจากไฟล์" value={summary.source} />
+          <Metric title="พร้อมนำเข้า" value={summary.ready} />
+          <Metric title="รายการซ้ำ" value={summary.duplicate} />
+          <Metric title="ข้อมูลไม่ถูกต้อง" value={summary.invalid} />
+          <Metric title="สินค้ายังไม่จับคู่" value={summary.unmapped} />
+          <Metric title="ยอดขายสุทธิใหม่" value={`฿${summary.net.toFixed(2)}`} />
         </div>
 
         {unmappedProducts.length > 0 && <section>
-          <h2>Product Mapping</h2>
-          <p>Unmapped products can still be imported, but COGS and stock deduction will remain incomplete until mapping is resolved.</p>
-          <div className="tablewrap"><table><thead><tr><th>GPOS Item</th><th>Map to INFLOW Menu</th></tr></thead><tbody>
+          <h2>จับคู่สินค้า</h2>
+          <p>สินค้าที่ยังไม่จับคู่สามารถนำเข้าได้ แต่ต้นทุนและการตัดสต็อกจะยังไม่สมบูรณ์จนกว่าจะจับคู่เมนูเรียบร้อย</p>
+          <div className="tablewrap"><table><thead><tr><th>สินค้าใน GPOS</th><th>จับคู่กับเมนู INFLOW</th></tr></thead><tbody>
             {unmappedProducts.map(row => <MappingRow key={row.normalisedItemName} row={row} menus={menus} onSave={saveProductMapping} />)}
           </tbody></table></div>
         </section>}
 
         {unmappedPayments.length > 0 && <section>
-          <h2>Payment Mapping</h2>
-          <div className="tablewrap"><table><thead><tr><th>GPOS Payment</th><th>Sales Channel</th><th>Payment Method</th><th /></tr></thead><tbody>
+          <h2>จับคู่การชำระเงิน</h2>
+          <div className="tablewrap"><table><thead><tr><th>การชำระเงินใน GPOS</th><th>ช่องทางขาย</th><th>วิธีชำระเงิน</th><th>จัดการ</th></tr></thead><tbody>
             {unmappedPayments.map(value => <PaymentRow key={value} value={value} onSave={savePaymentMapping} />)}
           </tbody></table></div>
         </section>}
 
-        <h2>Preview</h2>
-        <div className="tablewrap"><table><thead><tr>{['Status','Date-Time','Invoice','Item','Qty','Unit Price','Discount','Total','Payment'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
+        <h2>ตัวอย่างข้อมูลก่อนนำเข้า</h2>
+        <div className="tablewrap"><table><thead><tr>{['สถานะ','วัน-เวลา','เลขที่ใบขาย','สินค้า','จำนวน','ราคาต่อหน่วย','ส่วนลด','ยอดรวม','การชำระเงิน'].map(h => <th key={h}>{h}</th>)}</tr></thead><tbody>
           {rows.slice(0, 150).map((r, i) => <tr key={`${r.sourceRowHash}-${i}`} className={r.errors.length ? 'bad' : ''}>
-            <td>{r.errors.length ? 'Error' : r.duplicate ? 'Duplicate' : r.mappedMenuItemId ? 'Ready' : 'Ready / Unmapped'}</td>
+            <td>{r.errors.length ? 'ผิดพลาด' : r.duplicate ? 'รายการซ้ำ' : r.mappedMenuItemId ? 'พร้อม' : 'พร้อม / ยังไม่จับคู่'}</td>
             <td>{r.dateTime}</td><td>{r.invoiceNo}</td><td>{r.itemName}</td><td>{r.qty}</td><td>{r.unitPrice}</td><td>{r.discount}</td><td>{r.total}</td><td>{r.payment}</td>
           </tr>)}
         </tbody></table></div>
 
-        {summary.invalid > 0 && <div className="warn">Fix invalid source rows before confirming this import.</div>}
-        <button onClick={() => void confirmImport()} disabled={busy || summary.invalid > 0 || summary.ready === 0}>Confirm Import</button>
+        {summary.invalid > 0 && <div className="warn">กรุณาแก้ข้อมูลที่ไม่ถูกต้องก่อนยืนยันการนำเข้า</div>}
+        <button onClick={() => void confirmImport()} disabled={busy || summary.invalid > 0 || summary.ready === 0}>ยืนยันการนำเข้า</button>
       </>}
-      {commitResult && <div className="panel"><strong>Import ID:</strong> {commitResult.import_id}<br />Imported {commitResult.imported_rows}, duplicates {commitResult.duplicate_rows}, unmapped {commitResult.unmapped_rows}, net ฿{Number(commitResult.net_sales).toFixed(2)}</div>}
+      {commitResult && <div className="panel"><strong>รหัสการนำเข้า:</strong> {commitResult.import_id}<br />นำเข้า {commitResult.imported_rows} รายการ, ซ้ำ {commitResult.duplicate_rows} รายการ, ยังไม่จับคู่ {commitResult.unmapped_rows} รายการ, ยอดสุทธิ ฿{Number(commitResult.net_sales).toFixed(2)}</div>}
     </div>
   </>;
 }
@@ -169,11 +169,11 @@ function Metric({ title, value }: { title: string; value: string | number }) {
 
 function MappingRow({ row, menus, onSave }: { row: PreparedGposRow; menus: MenuItem[]; onSave: (name: string, menuId: string) => Promise<void> }) {
   const [menuId, setMenuId] = useState('');
-  return <tr><td>{row.itemName}</td><td><select value={menuId} onChange={e => setMenuId(e.target.value)}><option value="">Select menu item</option>{menus.map(m => <option key={m.id} value={m.id}>{m.name_th}{m.name_en ? ` / ${m.name_en}` : ''}</option>)}</select> <button className="smallbtn" disabled={!menuId} onClick={() => void onSave(row.itemName, menuId)}>Save</button></td></tr>;
+  return <tr><td>{row.itemName}</td><td><select value={menuId} onChange={e => setMenuId(e.target.value)}><option value="">เลือกเมนูสินค้า</option>{menus.map(m => <option key={m.id} value={m.id}>{m.name_th}{m.name_en ? ` / ${m.name_en}` : ''}</option>)}</select> <button className="smallbtn" disabled={!menuId} onClick={() => void onSave(row.itemName, menuId)}>บันทึก</button></td></tr>;
 }
 
 function PaymentRow({ value, onSave }: { value: string; onSave: (value: string, channel: string, method: string) => Promise<void> }) {
   const [channel, setChannel] = useState('WALK_IN');
   const [method, setMethod] = useState(value.toLowerCase().includes('prompt') ? 'PROMPTPAY' : 'CASH');
-  return <tr><td>{value}</td><td><select value={channel} onChange={e => setChannel(e.target.value)}><option>WALK_IN</option><option>GRABFOOD</option><option>LINEMAN</option><option>OTHER</option></select></td><td><select value={method} onChange={e => setMethod(e.target.value)}><option>CASH</option><option>PROMPTPAY</option><option>CARD</option><option>PLATFORM</option><option>OTHER</option></select></td><td><button className="smallbtn" onClick={() => void onSave(value, channel, method)}>Save</button></td></tr>;
+  return <tr><td>{value}</td><td><select value={channel} onChange={e => setChannel(e.target.value)}><option>WALK_IN</option><option>GRABFOOD</option><option>LINEMAN</option><option>OTHER</option></select></td><td><select value={method} onChange={e => setMethod(e.target.value)}><option>CASH</option><option>PROMPTPAY</option><option>CARD</option><option>PLATFORM</option><option>OTHER</option></select></td><td><button className="smallbtn" onClick={() => void onSave(value, channel, method)}>บันทึก</button></td></tr>;
 }
