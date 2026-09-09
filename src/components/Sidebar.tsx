@@ -19,7 +19,6 @@ import {
   Settings,
   ShoppingCart,
   SlidersHorizontal,
-  Store,
   Tags,
   Truck,
   Users,
