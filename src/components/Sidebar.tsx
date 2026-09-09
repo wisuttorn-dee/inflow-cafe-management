@@ -68,6 +68,7 @@ const navGroups: NavGroup[] = [
     label: 'สต็อก',
     items: [
       { label: 'ภาพรวมสต็อก', path: '/inventory', icon: Warehouse },
+      { label: 'ตัดสต็อกจากยอดขาย', path: '/inventory/sales-usage', icon: Coffee },
       { label: 'ความเคลื่อนไหว', path: '/inventory/movements', icon: History },
       { label: 'ตรวจนับสต็อก', path: '/inventory/count', icon: ClipboardCheck },
       { label: 'บันทึกของเสีย', path: '/inventory/waste', icon: XCircle },
