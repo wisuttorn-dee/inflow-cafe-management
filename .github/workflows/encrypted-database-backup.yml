@@ -46,6 +46,7 @@ jobs:
           set -euo pipefail
           docker pull postgres:17
           docker run --rm postgres:17 pg_dump --version
+          docker run --rm postgres:17 pg_restore --version
 
       - name: Create database dump
         shell: bash
@@ -74,6 +75,23 @@ jobs:
           rm -f "$RAW"
           echo "BACKUP_FILE=$ENC" >> "$GITHUB_ENV"
           echo "BACKUP_SHA=${ENC}.sha256" >> "$GITHUB_ENV"
+
+      - name: Offline restore validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum -c "$BACKUP_SHA"
+          VERIFY_DUMP="backup/restore-validation.dump"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 \
+            -in "$BACKUP_FILE" -out "$VERIFY_DUMP" \
+            -pass env:BACKUP_PASSPHRASE
+          docker run --rm \
+            -v "$PWD/backup:/backup:ro" \
+            postgres:17 \
+            pg_restore --list /backup/restore-validation.dump > /tmp/inflow-pg-restore-list.txt
+          test -s /tmp/inflow-pg-restore-list.txt
+          grep -Eq 'TABLE|FUNCTION|SCHEMA|ACL|POLICY' /tmp/inflow-pg-restore-list.txt
+          rm -f "$VERIFY_DUMP" /tmp/inflow-pg-restore-list.txt
 
       - name: Upload encrypted backup artifact
         uses: actions/upload-artifact@v4
@@ -124,7 +142,9 @@ jobs:
           echo "- Database dump: completed" >> "$GITHUB_STEP_SUMMARY"
           echo "- PostgreSQL client: 17 (Docker)" >> "$GITHUB_STEP_SUMMARY"
           echo "- Encryption: AES-256-CBC + PBKDF2" >> "$GITHUB_STEP_SUMMARY"
+          echo "- SHA-256 integrity check: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Offline decrypt + pg_restore archive validation: passed" >> "$GITHUB_STEP_SUMMARY"
           echo "- Artifact retention: 7 days" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Raw unencrypted dump removed before upload" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Raw/decrypted validation dumps removed before upload" >> "$GITHUB_STEP_SUMMARY"
           echo "- Failure alert: GitHub Issue assigned to repository owner" >> "$GITHUB_STEP_SUMMARY"
           echo "- Backup time: $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
