@@ -107,8 +107,8 @@ BEGIN
   END IF;
 END $$;
 
-INSERT INTO public.purchases(id, purchase_no, purchase_date, subtotal, discount_amount, tax_amount, total_amount, status)
-VALUES (:'purchase_id'::uuid, 'AUTO-E2E-PURCHASE', current_date, 300, 0, 0, 300, 'DRAFT');
+INSERT INTO public.purchases(id, purchase_no, purchase_date, subtotal, discount_amount, tax_amount, total_amount, status, created_by)
+VALUES (:'purchase_id'::uuid, 'AUTO-E2E-PURCHASE', current_date, 300, 0, 0, 300, 'DRAFT', :'owner_id'::uuid);
 
 INSERT INTO public.purchase_items(id, purchase_id, ingredient_id, purchase_quantity, purchase_unit_id, unit_price, line_total)
 VALUES (:'purchase_item_id'::uuid, :'purchase_id'::uuid, :'ingredient_id'::uuid, 200, :'unit_id'::uuid, 1.5, 300);
