@@ -148,14 +148,14 @@ INSERT INTO public.expense_categories(id, code, name_th, name_en, is_inventory_r
 VALUES (:'expense_category_id'::uuid, 'AUTO-E2E', 'ค่าใช้จ่ายทดสอบ', 'E2E expense', false);
 
 SELECT public.record_expense(
-  current_date,
+  current_date::date,
   :'expense_category_id'::uuid,
-  'Automated E2E expense',
-  50,
-  'CASH',
-  NULL,
-  'AUTO-E2E',
-  'Rollback test only'
+  'Automated E2E expense'::text,
+  50::numeric,
+  'CASH'::text,
+  NULL::uuid,
+  'AUTO-E2E'::text,
+  'Rollback test only'::text
 );
 
 DO $$
