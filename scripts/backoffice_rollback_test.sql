@@ -37,7 +37,7 @@ SELECT
 SELECT set_config('inflow.e2e_ingredient_id', :'ingredient_id', true);
 
 INSERT INTO public.units(id, code, name_th, name_en, unit_type, decimal_places)
-VALUES (:'unit_id'::uuid, 'E2E_G', 'กรัมทดสอบ', 'E2E gram', 'MASS', 2);
+VALUES (:'unit_id'::uuid, 'E2E_G', 'กรัมทดสอบ', 'E2E gram', 'WEIGHT', 2);
 
 INSERT INTO public.ingredients(id, ingredient_code, name_th, name_en, base_unit_id, minimum_stock_level)
 VALUES (:'ingredient_id'::uuid, 'E2E-ING', 'วัตถุดิบทดสอบ', 'E2E ingredient', :'unit_id'::uuid, 100);
