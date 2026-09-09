@@ -1,0 +1,56 @@
+name: Production Health Check
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 02:00 UTC = 09:00 Asia/Bangkok
+    - cron: '0 2 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inflow-production-health
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate database connection secret
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ -z "${SUPABASE_DB_URL:-}" ]; then
+            echo "Missing production environment secret: SUPABASE_DB_URL" >&2
+            exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Production data and security health check
+        shell: bash
+        run: psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f scripts/production_health_check.sql
+
+      - name: Back-office regression test with rollback
+        shell: bash
+        run: psql "$SUPABASE_DB_URL" -X -v ON_ERROR_STOP=1 -f scripts/backoffice_rollback_test.sql
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## INFLOW Production Health Check" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Security/data integrity checks: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Back-office transaction regression: passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Regression test data: rolled back" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Checked at: $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
