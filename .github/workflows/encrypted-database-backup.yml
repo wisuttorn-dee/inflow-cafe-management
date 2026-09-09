@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  issues: write
 
 concurrency:
   group: inflow-database-backup
@@ -85,6 +86,36 @@ jobs:
           retention-days: 7
           compression-level: 0
 
+      - name: Notify owner on failure
+        if: failure()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="🚨 INFLOW: Database Backup ล้มเหลว"
+          RUN_URL="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          BODY="Encrypted Database Backup ล้มเหลว กรุณาตรวจสอบ GitHub Actions ทันที\n\nRun: ${RUN_URL}\nCommit: ${GITHUB_SHA}\nเวลา (UTC): $(date -u '+%Y-%m-%d %H:%M:%S')"
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY"
+          else
+            gh issue create --title "$TITLE" --body "$BODY" --assignee "$GITHUB_REPOSITORY_OWNER"
+          fi
+
+      - name: Resolve previous failure alert
+        if: success()
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TITLE="🚨 INFLOW: Database Backup ล้มเหลว"
+          EXISTING=$(gh issue list --state open --search "$TITLE in:title" --json number --jq '.[0].number // empty')
+          if [ -n "$EXISTING" ]; then
+            gh issue close "$EXISTING" --comment "✅ Database Backup กลับมาทำงานปกติแล้วใน run ${GITHUB_RUN_ID}."
+          fi
+
       - name: Summary
         if: success()
         run: |
@@ -95,4 +126,5 @@ jobs:
           echo "- Encryption: AES-256-CBC + PBKDF2" >> "$GITHUB_STEP_SUMMARY"
           echo "- Artifact retention: 7 days" >> "$GITHUB_STEP_SUMMARY"
           echo "- Raw unencrypted dump removed before upload" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Failure alert: GitHub Issue assigned to repository owner" >> "$GITHUB_STEP_SUMMARY"
           echo "- Backup time: $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
