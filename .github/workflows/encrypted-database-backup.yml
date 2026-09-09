@@ -1,0 +1,89 @@
+name: Encrypted Database Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 03:00 UTC = 10:00 Asia/Bangkok
+    - cron: '0 3 * * *'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inflow-database-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate backup secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in SUPABASE_DB_URL BACKUP_PASSPHRASE; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing production environment secret: $key" >&2
+              exit 1
+            fi
+          done
+          if [ "${#BACKUP_PASSPHRASE}" -lt 20 ]; then
+            echo "BACKUP_PASSPHRASE must be at least 20 characters" >&2
+            exit 1
+          fi
+
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+
+      - name: Create database dump
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p backup
+          TS=$(date -u '+%Y%m%dT%H%M%SZ')
+          RAW="backup/inflow-${TS}.dump"
+          ENC="${RAW}.enc"
+          pg_dump "$SUPABASE_DB_URL" \
+            --format=custom \
+            --compress=9 \
+            --no-owner \
+            --no-acl \
+            --file="$RAW"
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+            -in "$RAW" -out "$ENC" \
+            -pass env:BACKUP_PASSPHRASE
+          sha256sum "$ENC" > "${ENC}.sha256"
+          rm -f "$RAW"
+          echo "BACKUP_FILE=$ENC" >> "$GITHUB_ENV"
+          echo "BACKUP_SHA=${ENC}.sha256" >> "$GITHUB_ENV"
+
+      - name: Upload encrypted backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inflow-db-backup-${{ github.run_id }}
+          path: |
+            ${{ env.BACKUP_FILE }}
+            ${{ env.BACKUP_SHA }}
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## INFLOW Encrypted Database Backup" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Database dump: completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Encryption: AES-256-CBC + PBKDF2" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifact retention: 7 days" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Raw unencrypted dump removed before upload" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Backup time: $(date -u '+%Y-%m-%d %H:%M UTC')" >> "$GITHUB_STEP_SUMMARY"
