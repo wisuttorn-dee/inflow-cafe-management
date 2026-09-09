@@ -1,0 +1,87 @@
+name: Encrypted Receipt Backup
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Sunday 03:30 UTC = Sunday 10:30 Asia/Bangkok
+    - cron: '30 3 * * 0'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inflow-receipt-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    environment: production
+    env:
+      VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Validate backup secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          for key in VITE_SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY BACKUP_PASSPHRASE; do
+            if [ -z "${!key:-}" ]; then
+              echo "Missing production environment secret: $key" >&2
+              exit 1
+            fi
+          done
+          if [ "${#BACKUP_PASSPHRASE}" -lt 20 ]; then
+            echo "BACKUP_PASSPHRASE must be at least 20 characters" >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Export private expense receipts
+        run: node scripts/export_receipts.mjs
+
+      - name: Encrypt receipt archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          TS=$(date -u '+%Y%m%dT%H%M%SZ')
+          tar -C backup -czf "/tmp/inflow-receipts-${TS}.tar.gz" receipts
+          openssl enc -aes-256-cbc -salt -pbkdf2 -iter 200000 \
+            -in "/tmp/inflow-receipts-${TS}.tar.gz" \
+            -out "backup/inflow-receipts-${TS}.tar.gz.enc" \
+            -pass env:BACKUP_PASSPHRASE
+          sha256sum "backup/inflow-receipts-${TS}.tar.gz.enc" > "backup/inflow-receipts-${TS}.tar.gz.enc.sha256"
+          rm -rf backup/receipts "/tmp/inflow-receipts-${TS}.tar.gz"
+
+      - name: Upload encrypted receipt artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: inflow-receipts-backup-${{ github.run_id }}
+          path: |
+            backup/*.enc
+            backup/*.sha256
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
+
+      - name: Summary
+        if: success()
+        run: |
+          echo "## INFLOW Encrypted Receipt Backup" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Private Storage receipt export: completed" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Encryption: AES-256-CBC + PBKDF2" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Artifact retention: 14 days" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Unencrypted receipt files removed before artifact upload" >> "$GITHUB_STEP_SUMMARY"
