@@ -1,0 +1,190 @@
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { supabase } from '../lib/supabase';
+import { uiError } from '../lib/ui';
+
+type SaleItem = {
+  id: string;
+  sales_transaction_id: string;
+  gpos_item_name: string;
+  menu_item_id: string | null;
+  quantity: number;
+  net_amount: number;
+  total_cost_snapshot: number | null;
+  costing_status: string;
+};
+
+type Transaction = { id: string; sold_at: string; status: string };
+type MenuItem = { id: string; name_th: string; name_en: string | null };
+
+type MenuSummary = {
+  key: string;
+  name: string;
+  quantity: number;
+  sales: number;
+  processedSales: number;
+  cost: number;
+  processedLines: number;
+  incompleteLines: number;
+};
+
+type SortKey = 'sales' | 'quantity' | 'profit' | 'margin';
+
+export function MenuProfitabilityPage() {
+  const [items, setItems] = useState<SaleItem[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [menus, setMenus] = useState<MenuItem[]>([]);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [query, setQuery] = useState('');
+  const [sortKey, setSortKey] = useState<SortKey>('sales');
+  const [msg, setMsg] = useState('');
+
+  const load = useCallback(async () => {
+    setMsg('');
+    const [a, b, c] = await Promise.all([
+      supabase.from('sales_items').select('id,sales_transaction_id,gpos_item_name,menu_item_id,quantity,net_amount,total_cost_snapshot,costing_status').order('created_at', { ascending: false }).limit(5000),
+      supabase.from('sales_transactions').select('id,sold_at,status').order('sold_at', { ascending: false }).limit(2000),
+      supabase.from('menu_items').select('id,name_th,name_en'),
+    ]);
+    if (a.error || b.error || c.error) {
+      setMsg(uiError('โหลดรายงานกำไรรายเมนู'));
+      return;
+    }
+    setItems((a.data ?? []) as SaleItem[]);
+    setTransactions((b.data ?? []) as Transaction[]);
+    setMenus((c.data ?? []) as MenuItem[]);
+  }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const txMap = useMemo(() => new Map(transactions.map(x => [x.id, x])), [transactions]);
+  const menuMap = useMemo(() => new Map(menus.map(x => [x.id, x])), [menus]);
+
+  const summaries = useMemo(() => {
+    const map = new Map<string, MenuSummary>();
+    for (const item of items) {
+      const tx = txMap.get(item.sales_transaction_id);
+      if (!tx || tx.status === 'REVERSED') continue;
+      const saleDate = tx.sold_at.slice(0, 10);
+      if (dateFrom && saleDate < dateFrom) continue;
+      if (dateTo && saleDate > dateTo) continue;
+
+      const menu = item.menu_item_id ? menuMap.get(item.menu_item_id) : undefined;
+      const key = item.menu_item_id ?? `GPOS:${item.gpos_item_name}`;
+      const name = menu?.name_th || menu?.name_en || item.gpos_item_name;
+      if (query && !name.toLowerCase().includes(query.toLowerCase())) continue;
+
+      const row = map.get(key) ?? {
+        key,
+        name,
+        quantity: 0,
+        sales: 0,
+        processedSales: 0,
+        cost: 0,
+        processedLines: 0,
+        incompleteLines: 0,
+      };
+      const qty = Number(item.quantity || 0);
+      const sales = Number(item.net_amount || 0);
+      row.quantity += qty;
+      row.sales += sales;
+      if (item.costing_status === 'PROCESSED' && item.total_cost_snapshot != null) {
+        row.processedSales += sales;
+        row.cost += Number(item.total_cost_snapshot || 0);
+        row.processedLines += 1;
+      } else {
+        row.incompleteLines += 1;
+      }
+      map.set(key, row);
+    }
+
+    const rows = [...map.values()];
+    const value = (row: MenuSummary) => {
+      const profit = row.processedSales - row.cost;
+      const margin = row.processedSales > 0 ? (profit / row.processedSales) * 100 : 0;
+      if (sortKey === 'quantity') return row.quantity;
+      if (sortKey === 'profit') return profit;
+      if (sortKey === 'margin') return margin;
+      return row.sales;
+    };
+    return rows.sort((a, b) => value(b) - value(a));
+  }, [items, txMap, menuMap, dateFrom, dateTo, query, sortKey]);
+
+  const totals = useMemo(() => summaries.reduce((acc, row) => {
+    acc.quantity += row.quantity;
+    acc.sales += row.sales;
+    acc.processedSales += row.processedSales;
+    acc.cost += row.cost;
+    acc.incomplete += row.incompleteLines;
+    return acc;
+  }, { quantity: 0, sales: 0, processedSales: 0, cost: 0, incomplete: 0 }), [summaries]);
+
+  const totalProfit = totals.processedSales - totals.cost;
+  const totalMargin = totals.processedSales > 0 ? (totalProfit / totals.processedSales) * 100 : 0;
+  const bestProfit = summaries.filter(x => x.processedLines > 0).sort((a, b) => (b.processedSales - b.cost) - (a.processedSales - a.cost))[0];
+  const bestMargin = summaries.filter(x => x.processedSales > 0).sort((a, b) => (((b.processedSales - b.cost) / b.processedSales) - ((a.processedSales - a.cost) / a.processedSales)))[0];
+
+  return <>
+    <div className="pagehead">
+      <div>
+        <h1>กำไรรายเมนู</h1>
+        <p className="lead">เปรียบเทียบยอดขาย ต้นทุนวัตถุดิบ กำไรขั้นต้น และอัตรากำไรของเครื่องดื่มแต่ละเมนูจากต้นทุนที่บันทึกตอนตัดสต็อกจริง</p>
+      </div>
+      <button className="secondary" onClick={() => void load()}>รีเฟรช</button>
+    </div>
+
+    <div className="cards compact">
+      <div className="card"><small>จำนวนที่ขาย</small><strong>{totals.quantity.toFixed(2)}</strong></div>
+      <div className="card"><small>ยอดขายสุทธิทั้งหมด</small><strong>฿{totals.sales.toFixed(2)}</strong></div>
+      <div className="card"><small>ต้นทุนขายที่คำนวณแล้ว</small><strong>฿{totals.cost.toFixed(2)}</strong></div>
+      <div className="card"><small>กำไรขั้นต้น (เฉพาะต้นทุนครบ)</small><strong>฿{totalProfit.toFixed(2)}</strong></div>
+      <div className="card"><small>Margin (เฉพาะต้นทุนครบ)</small><strong>{totalMargin.toFixed(1)}%</strong></div>
+    </div>
+
+    <div className="panel">
+      <div className="toolbar">
+        <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} aria-label="วันที่เริ่มต้น" />
+        <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} aria-label="วันที่สิ้นสุด" />
+        <input placeholder="ค้นหาเมนู..." value={query} onChange={e => setQuery(e.target.value)} />
+        <select value={sortKey} onChange={e => setSortKey(e.target.value as SortKey)}>
+          <option value="sales">เรียงตามยอดขาย</option>
+          <option value="quantity">เรียงตามจำนวนขาย</option>
+          <option value="profit">เรียงตามกำไร</option>
+          <option value="margin">เรียงตาม Margin</option>
+        </select>
+        <button className="secondary" onClick={() => { setDateFrom(''); setDateTo(''); setQuery(''); }}>ล้างตัวกรอง</button>
+      </div>
+      {dateFrom && dateTo && dateFrom > dateTo && <div className="warn">วันที่เริ่มต้นต้องไม่มากกว่าวันที่สิ้นสุด</div>}
+      {totals.incomplete > 0 && <div className="warn">มี {totals.incomplete} รายการขายที่ต้นทุนยังไม่ครบ กำไรและ Margin ในรายงานจะคำนวณเฉพาะรายการที่ต้นทุนสมบูรณ์ เพื่อไม่ให้แสดงกำไรสูงเกินจริง</div>}
+      {msg && <div className="warn">{msg}</div>}
+
+      {(bestProfit || bestMargin) && <div className="cards compact">
+        {bestProfit && <div className="card"><small>กำไรขั้นต้นรวมสูงสุด</small><strong>{bestProfit.name}</strong><span>฿{(bestProfit.processedSales - bestProfit.cost).toFixed(2)}</span></div>}
+        {bestMargin && <div className="card"><small>Margin สูงสุด</small><strong>{bestMargin.name}</strong><span>{(((bestMargin.processedSales - bestMargin.cost) / bestMargin.processedSales) * 100).toFixed(1)}%</span></div>}
+      </div>}
+
+      <div className="tablewrap"><table><thead><tr>
+        <th>เมนู</th><th>จำนวนขาย</th><th>ยอดขายสุทธิ</th><th>ยอดขายที่ต้นทุนครบ</th><th>ต้นทุนขาย</th><th>กำไรขั้นต้น</th><th>Margin</th><th>ต้นทุนเฉลี่ย/หน่วยขาย</th><th>สถานะต้นทุน</th>
+      </tr></thead><tbody>
+        {summaries.map(row => {
+          const profit = row.processedSales - row.cost;
+          const margin = row.processedSales > 0 ? (profit / row.processedSales) * 100 : 0;
+          const avgCost = row.quantity > 0 ? row.cost / row.quantity : 0;
+          const complete = row.incompleteLines === 0;
+          return <tr key={row.key}>
+            <td><strong>{row.name}</strong></td>
+            <td>{row.quantity.toFixed(2)}</td>
+            <td>฿{row.sales.toFixed(2)}</td>
+            <td>฿{row.processedSales.toFixed(2)}</td>
+            <td>฿{row.cost.toFixed(2)}</td>
+            <td>{row.processedLines > 0 ? `฿${profit.toFixed(2)}` : '—'}</td>
+            <td>{row.processedLines > 0 ? `${margin.toFixed(1)}%` : '—'}</td>
+            <td>{row.processedLines > 0 ? `฿${avgCost.toFixed(2)}` : '—'}</td>
+            <td>{complete ? 'ต้นทุนครบ' : `ยังไม่ครบ ${row.incompleteLines} รายการ`}</td>
+          </tr>;
+        })}
+        {summaries.length === 0 && <tr><td colSpan={9} className="empty">ไม่พบข้อมูลตามเงื่อนไข</td></tr>}
+      </tbody></table></div>
+    </div>
+  </>;
+}
