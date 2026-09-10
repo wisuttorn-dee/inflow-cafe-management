@@ -45,6 +45,7 @@ const navGroups: NavGroup[] = [
     items: [
       { label: 'แดชบอร์ด', path: '/', icon: LayoutDashboard },
       { label: 'ภาพรวมยอดขาย', path: '/sales', icon: BarChart3, roles: managementRoles },
+      { label: 'กำไรรายเมนู', path: '/sales/menu-profitability', icon: WalletCards, roles: managementRoles },
       { label: 'รายงานกำไร', path: '/reports', icon: Gauge, roles: managementRoles },
     ],
   },
