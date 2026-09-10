@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { formatUnit, uiError } from '../lib/ui';
 
@@ -19,27 +20,18 @@ type SaleItem = {
 };
 type Transaction = { id: string; invoice_no: string; sold_at: string; status: string };
 type MenuItem = { id: string; name_th: string; name_en: string | null };
-type Movement = {
-  id: string;
-  sales_item_id: string | null;
-  ingredient_id: string;
-  quantity_base_unit: number;
-  unit_cost: number | null;
-  total_cost: number | null;
-  occurred_at: string;
-};
-type Ingredient = { id: string; name_th: string; name_en: string | null; base_unit_id: string };
-type Unit = { id: string; code: string; name_th: string | null; name_en: string | null };
-type DetailRow = Movement & { ingredientName: string; unitName: string };
+type Movement = { id:string; sales_item_id:string|null; ingredient_id:string; quantity_base_unit:number; unit_cost:number|null; total_cost:number|null; occurred_at:string };
+type Ingredient = { id:string; name_th:string; name_en:string|null; base_unit_id:string };
+type Unit = { id:string; code:string; name_th:string|null; name_en:string|null };
+type DetailRow = Movement & { ingredientName:string; unitName:string };
 
 const statusLabel: Record<string, string> = {
-  PROCESSED: 'ตัดสต็อกแล้ว',
-  PENDING: 'รอตัดสต็อก',
-  MISSING_COST: 'ต้นทุนไม่ครบ',
-  ERROR: 'ต้องตรวจสอบ',
+  PROCESSED: 'ตัดสต็อกแล้ว', PENDING: 'รอตัดสต็อก', MISSING_COST: 'ต้นทุนไม่ครบ', ERROR: 'ต้องตรวจสอบ',
 };
 
 export function SalesInventoryUsagePage() {
+  const [searchParams] = useSearchParams();
+  const invoiceParam = searchParams.get('invoice') ?? '';
   const [items, setItems] = useState<SaleItem[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [menus, setMenus] = useState<MenuItem[]>([]);
@@ -47,12 +39,14 @@ export function SalesInventoryUsagePage() {
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [units, setUnits] = useState<Unit[]>([]);
   const [selected, setSelected] = useState('');
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState(invoiceParam);
   const [status, setStatus] = useState('ALL');
   const [date, setDate] = useState('');
   const [role, setRole] = useState<Role>('STAFF');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
+
+  useEffect(() => { if (invoiceParam) setQuery(invoiceParam); }, [invoiceParam]);
 
   const load = useCallback(async () => {
     setMsg('');
@@ -61,33 +55,24 @@ export function SalesInventoryUsagePage() {
       const { data: profile } = await supabase.from('profiles').select('role').eq('id', authData.user.id).maybeSingle();
       if (profile?.role === 'OWNER' || profile?.role === 'MANAGER' || profile?.role === 'STAFF') setRole(profile.role);
     }
-
-    const [a, b, c, d, e, f] = await Promise.all([
-      supabase.from('sales_items').select('id,sales_transaction_id,gpos_item_name,menu_item_id,recipe_id,quantity,net_amount,unit_cost_snapshot,total_cost_snapshot,mapping_status,costing_status').order('created_at', { ascending: false }).limit(1000),
-      supabase.from('sales_transactions').select('id,invoice_no,sold_at,status').order('sold_at', { ascending: false }).limit(1000),
+    const [a,b,c,d,e,f] = await Promise.all([
+      supabase.from('sales_items').select('id,sales_transaction_id,gpos_item_name,menu_item_id,recipe_id,quantity,net_amount,unit_cost_snapshot,total_cost_snapshot,mapping_status,costing_status').order('created_at',{ascending:false}).limit(1000),
+      supabase.from('sales_transactions').select('id,invoice_no,sold_at,status').order('sold_at',{ascending:false}).limit(1000),
       supabase.from('menu_items').select('id,name_th,name_en'),
-      supabase.from('inventory_movements').select('id,sales_item_id,ingredient_id,quantity_base_unit,unit_cost,total_cost,occurred_at').eq('movement_type', 'SALE_USAGE').order('occurred_at', { ascending: false }).limit(5000),
+      supabase.from('inventory_movements').select('id,sales_item_id,ingredient_id,quantity_base_unit,unit_cost,total_cost,occurred_at').eq('movement_type','SALE_USAGE').order('occurred_at',{ascending:false}).limit(5000),
       supabase.from('ingredients').select('id,name_th,name_en,base_unit_id'),
       supabase.from('units').select('id,code,name_th,name_en'),
     ]);
-    if (a.error || b.error || c.error || d.error || e.error || f.error) {
-      setMsg(uiError('โหลดข้อมูลการตัดสต็อกจากยอดขาย'));
-      return;
-    }
-    setItems((a.data ?? []) as SaleItem[]);
-    setTransactions((b.data ?? []) as Transaction[]);
-    setMenus((c.data ?? []) as MenuItem[]);
-    setMovements((d.data ?? []) as Movement[]);
-    setIngredients((e.data ?? []) as Ingredient[]);
-    setUnits((f.data ?? []) as Unit[]);
+    if (a.error || b.error || c.error || d.error || e.error || f.error) { setMsg(uiError('โหลดข้อมูลการตัดสต็อกจากยอดขาย')); return; }
+    setItems((a.data ?? []) as SaleItem[]); setTransactions((b.data ?? []) as Transaction[]); setMenus((c.data ?? []) as MenuItem[]); setMovements((d.data ?? []) as Movement[]); setIngredients((e.data ?? []) as Ingredient[]); setUnits((f.data ?? []) as Unit[]);
   }, []);
 
   useEffect(() => { void load(); }, [load]);
 
-  const txMap = useMemo(() => new Map(transactions.map(x => [x.id, x])), [transactions]);
-  const menuMap = useMemo(() => new Map(menus.map(x => [x.id, x])), [menus]);
-  const ingredientMap = useMemo(() => new Map(ingredients.map(x => [x.id, x])), [ingredients]);
-  const unitMap = useMemo(() => new Map(units.map(x => [x.id, x])), [units]);
+  const txMap = useMemo(() => new Map(transactions.map(x => [x.id,x])), [transactions]);
+  const menuMap = useMemo(() => new Map(menus.map(x => [x.id,x])), [menus]);
+  const ingredientMap = useMemo(() => new Map(ingredients.map(x => [x.id,x])), [ingredients]);
+  const unitMap = useMemo(() => new Map(units.map(x => [x.id,x])), [units]);
 
   const filtered = useMemo(() => items.filter(item => {
     const tx = txMap.get(item.sales_transaction_id);
@@ -96,110 +81,47 @@ export function SalesInventoryUsagePage() {
     const hay = `${tx?.invoice_no ?? ''} ${name} ${item.gpos_item_name}`.toLowerCase();
     if (query && !hay.includes(query.toLowerCase())) return false;
     if (status !== 'ALL' && item.costing_status !== status) return false;
-    if (date && tx?.sold_at.slice(0, 10) !== date) return false;
+    if (date && tx?.sold_at.slice(0,10) !== date) return false;
     return true;
-  }), [items, txMap, menuMap, query, status, date]);
+  }), [items,txMap,menuMap,query,status,date]);
 
   const selectedItem = items.find(x => x.id === selected) ?? null;
   const details: DetailRow[] = useMemo(() => movements.filter(m => m.sales_item_id === selected).map(m => {
-    const ing = ingredientMap.get(m.ingredient_id);
-    const u = ing ? unitMap.get(ing.base_unit_id) : undefined;
-    return {
-      ...m,
-      ingredientName: ing?.name_th || ing?.name_en || m.ingredient_id,
-      unitName: formatUnit(u),
-    };
-  }), [movements, selected, ingredientMap, unitMap]);
+    const ing = ingredientMap.get(m.ingredient_id); const u = ing ? unitMap.get(ing.base_unit_id) : undefined;
+    return {...m,ingredientName:ing?.name_th || ing?.name_en || m.ingredient_id,unitName:formatUnit(u)};
+  }), [movements,selected,ingredientMap,unitMap]);
 
   const totals = useMemo(() => ({
     processed: filtered.filter(x => x.costing_status === 'PROCESSED').length,
     pending: filtered.filter(x => x.costing_status === 'PENDING').length,
     problem: filtered.filter(x => x.costing_status === 'MISSING_COST' || x.costing_status === 'ERROR').length,
-    cost: filtered.reduce((sum, x) => sum + Number(x.total_cost_snapshot ?? 0), 0),
+    cost: filtered.reduce((sum,x) => sum + Number(x.total_cost_snapshot ?? 0),0),
   }), [filtered]);
 
   async function processPending() {
     if (role !== 'OWNER' && role !== 'MANAGER') return;
-    setBusy(true);
-    setMsg('');
+    setBusy(true); setMsg('');
     const ids = filtered.filter(x => x.costing_status !== 'PROCESSED' && x.mapping_status === 'MATCHED' && x.recipe_id).map(x => x.id);
-    if (ids.length === 0) {
-      setMsg('ไม่มีรายการที่พร้อมประมวลผลในตัวกรองปัจจุบัน');
-      setBusy(false);
-      return;
-    }
-    const { data, error } = await supabase.rpc('process_pending_sales_inventory', { p_sales_item_ids: ids });
+    if (ids.length === 0) { setMsg('ไม่มีรายการที่พร้อมประมวลผลในตัวกรองปัจจุบัน'); setBusy(false); return; }
+    const { data,error } = await supabase.rpc('process_pending_sales_inventory',{p_sales_item_ids:ids});
     setBusy(false);
-    if (error) {
-      setMsg(uiError('ประมวลผลการตัดสต็อก'));
-      return;
-    }
-    const result = data as { processed?: number; missing_cost?: number; errors?: number } | null;
+    if (error) { setMsg(uiError('ประมวลผลการตัดสต็อก')); return; }
+    const result = data as {processed?:number;missing_cost?:number;errors?:number}|null;
     setMsg(`ประมวลผลแล้ว ${result?.processed ?? 0} รายการ · ต้นทุนไม่ครบ ${result?.missing_cost ?? 0} · ผิดพลาด ${result?.errors ?? 0}`);
     await load();
   }
 
   return <>
-    <div className="pagehead">
-      <div>
-        <h1>ตัดสต็อกจากยอดขาย</h1>
-        <p className="lead">ตรวจสอบว่าเครื่องดื่มแต่ละรายการขายตัดวัตถุดิบอะไร ปริมาณเท่าไร และมีต้นทุนรวมเท่าไร โดยเชื่อมย้อนกลับถึงใบขายและรายการตัดสต็อกจริง</p>
-      </div>
-      {(role === 'OWNER' || role === 'MANAGER') && <button onClick={() => void processPending()} disabled={busy}>{busy ? 'กำลังประมวลผล…' : 'ประมวลผลรายการที่รอตัด'}</button>}
-    </div>
-
-    <div className="cards compact">
-      <div className="card"><small>ตัดสต็อกแล้ว</small><strong>{totals.processed}</strong></div>
-      <div className="card"><small>รอตัดสต็อก</small><strong>{totals.pending}</strong></div>
-      <div className="card"><small>ต้องตรวจสอบ</small><strong>{totals.problem}</strong></div>
-      <div className="card"><small>ต้นทุนวัตถุดิบรวม</small><strong>฿{totals.cost.toFixed(2)}</strong></div>
-    </div>
-
-    <div className="panel">
-      <div className="toolbar">
-        <input type="date" value={date} onChange={e => setDate(e.target.value)} aria-label="วันที่ขาย" />
-        <input placeholder="ค้นหาเมนูหรือเลขที่ใบขาย..." value={query} onChange={e => setQuery(e.target.value)} />
-        <select value={status} onChange={e => setStatus(e.target.value)}>
-          <option value="ALL">ทุกสถานะ</option>
-          <option value="PROCESSED">ตัดสต็อกแล้ว</option>
-          <option value="PENDING">รอตัดสต็อก</option>
-          <option value="MISSING_COST">ต้นทุนไม่ครบ</option>
-          <option value="ERROR">ต้องตรวจสอบ</option>
-        </select>
-        <button className="secondary" onClick={() => void load()}>รีเฟรช</button>
-      </div>
+    <div className="pagehead"><div><h1>ตัดสต็อกจากยอดขาย</h1><p className="lead">ตรวจสอบว่าเครื่องดื่มแต่ละรายการขายตัดวัตถุดิบอะไร ปริมาณเท่าไร และมีต้นทุนรวมเท่าไร โดยเชื่อมย้อนกลับถึงใบขายและรายการตัดสต็อกจริง</p></div>{(role === 'OWNER' || role === 'MANAGER') && <button onClick={() => void processPending()} disabled={busy}>{busy ? 'กำลังประมวลผล…' : 'ประมวลผลรายการที่รอตัด'}</button>}</div>
+    <div className="cards compact"><div className="card"><small>ตัดสต็อกแล้ว</small><strong>{totals.processed}</strong></div><div className="card"><small>รอตัดสต็อก</small><strong>{totals.pending}</strong></div><div className="card"><small>ต้องตรวจสอบ</small><strong>{totals.problem}</strong></div><div className="card"><small>ต้นทุนวัตถุดิบรวม</small><strong>฿{totals.cost.toFixed(2)}</strong></div></div>
+    <div className="panel"><div className="toolbar"><input type="date" value={date} onChange={e => setDate(e.target.value)} aria-label="วันที่ขาย"/><input placeholder="ค้นหาเมนูหรือเลขที่ใบขาย..." value={query} onChange={e => setQuery(e.target.value)}/><select value={status} onChange={e => setStatus(e.target.value)}><option value="ALL">ทุกสถานะ</option><option value="PROCESSED">ตัดสต็อกแล้ว</option><option value="PENDING">รอตัดสต็อก</option><option value="MISSING_COST">ต้นทุนไม่ครบ</option><option value="ERROR">ต้องตรวจสอบ</option></select><button className="secondary" onClick={() => void load()}>รีเฟรช</button></div>
+      {invoiceParam && <p className="muted">กำลังแสดงรายการจากใบขาย: <strong>{invoiceParam}</strong></p>}
       {msg && <div className="warn">{msg}</div>}
-      <div className="tablewrap"><table><thead><tr>
-        <th>วัน-เวลา</th><th>เลขที่ใบขาย</th><th>เมนู</th><th>จำนวนขาย</th><th>ยอดขาย</th><th>ต้นทุน/แก้ว</th><th>ต้นทุนรวม</th><th>สถานะ</th><th>รายละเอียด</th>
-      </tr></thead><tbody>
-        {filtered.map(item => {
-          const tx = txMap.get(item.sales_transaction_id);
-          const menu = item.menu_item_id ? menuMap.get(item.menu_item_id) : null;
-          const menuName = menu?.name_th || menu?.name_en || item.gpos_item_name;
-          return <tr key={item.id}>
-            <td>{tx ? new Date(tx.sold_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' }) : '-'}</td>
-            <td>{tx?.invoice_no ?? '-'}</td>
-            <td><strong>{menuName}</strong>{menuName !== item.gpos_item_name && <small className="muted block">GPOS: {item.gpos_item_name}</small>}</td>
-            <td>{Number(item.quantity).toFixed(2)}</td>
-            <td>฿{Number(item.net_amount).toFixed(2)}</td>
-            <td>{item.unit_cost_snapshot == null ? '—' : `฿${Number(item.unit_cost_snapshot).toFixed(2)}`}</td>
-            <td>{item.total_cost_snapshot == null ? '—' : `฿${Number(item.total_cost_snapshot).toFixed(2)}`}</td>
-            <td>{statusLabel[item.costing_status] ?? item.costing_status}</td>
-            <td><button className="smallbtn" onClick={() => setSelected(item.id)}>ดูวัตถุดิบ</button></td>
-          </tr>;
-        })}
+      <div className="tablewrap"><table><thead><tr><th>วัน-เวลา</th><th>เลขที่ใบขาย</th><th>เมนู</th><th>จำนวนขาย</th><th>ยอดขาย</th><th>ต้นทุน/แก้ว</th><th>ต้นทุนรวม</th><th>สถานะ</th><th>รายละเอียด</th></tr></thead><tbody>
+        {filtered.map(item => { const tx=txMap.get(item.sales_transaction_id); const menu=item.menu_item_id?menuMap.get(item.menu_item_id):null; const menuName=menu?.name_th || menu?.name_en || item.gpos_item_name; return <tr key={item.id}><td>{tx ? new Date(tx.sold_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'}) : '-'}</td><td>{tx?.invoice_no ?? '-'}</td><td><strong>{menuName}</strong>{menuName !== item.gpos_item_name && <small className="muted block">GPOS: {item.gpos_item_name}</small>}</td><td>{Number(item.quantity).toFixed(2)}</td><td>฿{Number(item.net_amount).toFixed(2)}</td><td>{item.unit_cost_snapshot == null ? '—' : `฿${Number(item.unit_cost_snapshot).toFixed(2)}`}</td><td>{item.total_cost_snapshot == null ? '—' : `฿${Number(item.total_cost_snapshot).toFixed(2)}`}</td><td>{statusLabel[item.costing_status] ?? item.costing_status}</td><td><button className="smallbtn" onClick={() => setSelected(item.id)}>ดูวัตถุดิบ</button></td></tr>; })}
         {filtered.length === 0 && <tr><td colSpan={9} className="empty">ไม่พบรายการขายตามเงื่อนไข</td></tr>}
       </tbody></table></div>
     </div>
-
-    {selectedItem && <div className="panel">
-      <h2>รายละเอียดวัตถุดิบที่ตัด</h2>
-      <p>รายการนี้มีสถานะ <strong>{statusLabel[selectedItem.costing_status] ?? selectedItem.costing_status}</strong></p>
-      {selectedItem.costing_status !== 'PROCESSED' && <div className="warn">ยังไม่มีการตัดวัตถุดิบจริงครบถ้วนสำหรับรายการนี้ กรุณาตรวจสูตร การจับคู่เมนู และต้นทุนวัตถุดิบ</div>}
-      <div className="tablewrap"><table><thead><tr><th>วัตถุดิบ</th><th>ปริมาณที่ตัด</th><th>ต้นทุนต่อหน่วย</th><th>ต้นทุนรวม</th><th>เวลาตัดสต็อก</th></tr></thead><tbody>
-        {details.map(row => <tr key={row.id}><td>{row.ingredientName}</td><td>{Math.abs(Number(row.quantity_base_unit)).toFixed(4)} {row.unitName}</td><td>{row.unit_cost == null ? '—' : `฿${Number(row.unit_cost).toFixed(4)}`}</td><td>{row.total_cost == null ? '—' : `฿${Math.abs(Number(row.total_cost)).toFixed(2)}`}</td><td>{new Date(row.occurred_at).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}</td></tr>)}
-        {details.length === 0 && <tr><td colSpan={5} className="empty">ยังไม่มีรายการตัดวัตถุดิบสำหรับการขายนี้</td></tr>}
-      </tbody></table></div>
-    </div>}
+    {selectedItem && <div className="panel"><h2>รายละเอียดวัตถุดิบที่ตัด</h2><p>รายการนี้มีสถานะ <strong>{statusLabel[selectedItem.costing_status] ?? selectedItem.costing_status}</strong></p>{selectedItem.costing_status !== 'PROCESSED' && <div className="warn">ยังไม่มีการตัดวัตถุดิบจริงครบถ้วนสำหรับรายการนี้ กรุณาตรวจสูตร การจับคู่เมนู และต้นทุนวัตถุดิบ</div>}<div className="tablewrap"><table><thead><tr><th>วัตถุดิบ</th><th>ปริมาณที่ตัด</th><th>ต้นทุนต่อหน่วย</th><th>ต้นทุนรวม</th><th>เวลาตัดสต็อก</th></tr></thead><tbody>{details.map(row => <tr key={row.id}><td>{row.ingredientName}</td><td>{Math.abs(Number(row.quantity_base_unit)).toFixed(4)} {row.unitName}</td><td>{row.unit_cost == null ? '—' : `฿${Number(row.unit_cost).toFixed(4)}`}</td><td>{row.total_cost == null ? '—' : `฿${Math.abs(Number(row.total_cost)).toFixed(2)}`}</td><td>{new Date(row.occurred_at).toLocaleString('th-TH',{timeZone:'Asia/Bangkok'})}</td></tr>)}{details.length === 0 && <tr><td colSpan={5} className="empty">ยังไม่มีรายการตัดวัตถุดิบสำหรับการขายนี้</td></tr>}</tbody></table></div></div>}
   </>;
 }
