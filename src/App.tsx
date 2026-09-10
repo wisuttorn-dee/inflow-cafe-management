@@ -13,6 +13,7 @@ import { PurchasesPage } from './pages/PurchasesPage';
 import { StockMovementsPage } from './pages/StockMovementsPage';
 import { StockCountPage } from './pages/StockCountPage';
 import { SalesInventoryUsagePage } from './pages/SalesInventoryUsagePage';
+import { MenuProfitabilityPage } from './pages/MenuProfitabilityPage';
 import { WastePage } from './pages/WastePage';
 import { ExpensesPage } from './pages/ExpensesPage';
 import { ManagementDashboardPage } from './pages/ManagementDashboardPage';
@@ -20,7 +21,7 @@ import { LowStockPage } from './pages/LowStockPage';
 import { UserManagementPage } from './pages/UserManagementPage';
 
 const sections = [
-  ['แดชบอร์ด','/'],['ภาพรวมยอดขาย','/sales'],['รายการขาย','/sales/transactions'],['นำเข้า GPOS','/sales/import'],['ประวัตินำเข้า','/sales/import-history'],
+  ['แดชบอร์ด','/'],['ภาพรวมยอดขาย','/sales'],['กำไรรายเมนู','/sales/menu-profitability'],['รายการขาย','/sales/transactions'],['นำเข้า GPOS','/sales/import'],['ประวัตินำเข้า','/sales/import-history'],
   ['เมนูสินค้า','/menu'],['สูตรเครื่องดื่ม','/recipes'],['ต้นทุนสูตร','/recipe-costing'],['ภาพรวมสต็อก','/inventory'],['ตัดสต็อกจากยอดขาย','/inventory/sales-usage'],['ความเคลื่อนไหวสต็อก','/inventory/movements'],
   ['ตรวจนับสต็อก','/inventory/count'],['ของเสีย','/inventory/waste'],['วัตถุดิบใกล้หมด','/inventory/low'],['จัดซื้อ','/purchasing'],['ซัพพลายเออร์','/suppliers'],
   ['ค่าใช้จ่าย','/expenses'],['รายงานกำไร','/reports'],['หน่วยนับ','/settings/units'],['หมวดเมนู','/settings/categories'],['วัตถุดิบ','/ingredients'],['ผู้ใช้งาน','/settings/users'],['ตั้งค่า','/settings']
@@ -49,9 +50,9 @@ function Shell(){
     {navOpen&&<button className="sidebarBackdrop" onClick={()=>setNavOpen(false)} aria-label="ปิดเมนู"/>}
     <Sidebar open={navOpen} onNavigate={()=>setNavOpen(false)}/>
     <main className="appMain"><Routes>
-      <Route path="/" element={<Dashboard/>}/><Route path="/sales" element={<SalesOverviewPage/>}/><Route path="/sales/transactions" element={<SalesTransactionsPage/>}/><Route path="/sales/import" element={<GposImportPage/>}/><Route path="/sales/import-history" element={<ImportHistoryPage/>}/><Route path="/recipes" element={<RecipePage/>}/><Route path="/recipe-costing" element={<SalesOverviewPage/>}/><Route path="/inventory" element={<InventoryPage/>}/><Route path="/inventory/sales-usage" element={<SalesInventoryUsagePage/>}/><Route path="/inventory/movements" element={<StockMovementsPage/>}/><Route path="/inventory/count" element={<StockCountPage/>}/><Route path="/inventory/waste" element={<WastePage/>}/><Route path="/inventory/low" element={<LowStockPage/>}/><Route path="/purchasing" element={<PurchasesPage/>}/><Route path="/expenses" element={<ExpensesPage/>}/><Route path="/reports" element={<ManagementDashboardPage/>}/><Route path="/settings/users" element={<UserManagementPage/>}/>
+      <Route path="/" element={<Dashboard/>}/><Route path="/sales" element={<SalesOverviewPage/>}/><Route path="/sales/menu-profitability" element={<MenuProfitabilityPage/>}/><Route path="/sales/transactions" element={<SalesTransactionsPage/>}/><Route path="/sales/import" element={<GposImportPage/>}/><Route path="/sales/import-history" element={<ImportHistoryPage/>}/><Route path="/recipes" element={<RecipePage/>}/><Route path="/recipe-costing" element={<SalesOverviewPage/>}/><Route path="/inventory" element={<InventoryPage/>}/><Route path="/inventory/sales-usage" element={<SalesInventoryUsagePage/>}/><Route path="/inventory/movements" element={<StockMovementsPage/>}/><Route path="/inventory/count" element={<StockCountPage/>}/><Route path="/inventory/waste" element={<WastePage/>}/><Route path="/inventory/low" element={<LowStockPage/>}/><Route path="/purchasing" element={<PurchasesPage/>}/><Route path="/expenses" element={<ExpensesPage/>}/><Route path="/reports" element={<ManagementDashboardPage/>}/><Route path="/settings/users" element={<UserManagementPage/>}/>
       <Route path="/menu" element={<MasterData title="เมนูสินค้า" table="menu_items" fields={['name_th','name_en','selling_price']}/>}/><Route path="/suppliers" element={<MasterData title="ซัพพลายเออร์" table="suppliers" fields={['supplier_name','phone','email']}/>}/><Route path="/settings/units" element={<MasterData title="หน่วยนับ" table="units" fields={['code','name_th','name_en','unit_type']}/>}/><Route path="/settings/categories" element={<MasterData title="หมวดเมนู" table="menu_categories" fields={['name_th','name_en','display_order']}/>}/><Route path="/ingredients" element={<MasterData title="วัตถุดิบ" table="ingredients" fields={['ingredient_code','name_th','name_en','base_unit_id']}/>}/><Route path="/settings" element={<Settings/>}/>
-      {sections.filter(([,p])=>!['/','/sales','/sales/transactions','/sales/import','/sales/import-history','/recipes','/recipe-costing','/inventory','/inventory/sales-usage','/inventory/movements','/inventory/count','/inventory/waste','/inventory/low','/purchasing','/expenses','/reports','/settings/users','/menu','/suppliers','/settings','/settings/units','/settings/categories','/ingredients'].includes(p)).map(([n,p])=><Route key={p} path={p} element={<ComingSoon title={n}/>}/>)}</Routes></main>
+      {sections.filter(([,p])=>!['/','/sales','/sales/menu-profitability','/sales/transactions','/sales/import','/sales/import-history','/recipes','/recipe-costing','/inventory','/inventory/sales-usage','/inventory/movements','/inventory/count','/inventory/waste','/inventory/low','/purchasing','/expenses','/reports','/settings/users','/menu','/suppliers','/settings','/settings/units','/settings/categories','/ingredients'].includes(p)).map(([n,p])=><Route key={p} path={p} element={<ComingSoon title={n}/>}/>)}</Routes></main>
   </div>
 }
 
