@@ -2,6 +2,13 @@ name: Production Health Check
 
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - main
+    paths:
+      - 'scripts/production_health_check.sql'
+      - 'scripts/backoffice_rollback_test.sql'
+      - '.github/workflows/production-health-check.yml'
   schedule:
     # 02:00 UTC = 09:00 Asia/Bangkok
     - cron: '0 2 * * *'
