@@ -134,6 +134,14 @@ END $$;
 
 SELECT public.record_waste(:'ingredient_id'::uuid, 10, :'unit_id'::uuid, 'SPILLAGE', 'Automated E2E waste', now());
 
+-- The production system intentionally allows only one DRAFT stock count at a time.
+-- A real user may legitimately have a draft open when this rollback-only regression test runs.
+-- Temporarily cancel any live drafts inside this transaction so create_stock_count can be tested;
+-- the final ROLLBACK restores every live draft exactly as it was.
+UPDATE public.stock_counts
+SET status = 'CANCELLED'
+WHERE status = 'DRAFT';
+
 SELECT public.create_stock_count(current_date, 'Automated E2E stock count')::text AS stock_count_id
 \gset
 
