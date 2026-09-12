@@ -145,6 +145,12 @@ WHERE status = 'DRAFT';
 SELECT public.create_stock_count(current_date, 'Automated E2E stock count')::text AS stock_count_id
 \gset
 
+-- create_stock_count snapshots every active tracked ingredient. Mark all snapshot lines as counted
+-- at their expected quantity, then introduce one controlled variance for the E2E ingredient only.
+UPDATE public.stock_count_items
+SET actual_quantity = expected_quantity
+WHERE stock_count_id = :'stock_count_id'::uuid;
+
 UPDATE public.stock_count_items
 SET actual_quantity = 980
 WHERE stock_count_id = :'stock_count_id'::uuid
